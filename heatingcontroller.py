@@ -4,6 +4,8 @@ import re
 import paho.mqtt.client as mqtt
 from time import sleep
 from heatingcontroller_settings import HeatingControllerSettings as Settings
+from heatingcontroller_scheduler import HeatingControllerScheduler
+
 from influxdb import InfluxDBClient
 from typing import NamedTuple
 
@@ -29,9 +31,11 @@ class SensorData(NamedTuple):
 
 class HeatingController():
     def __init__(self):
-        self.temperature = 0
-        self.set_temperature = 23
-        self.hysteresis = 1.5
+        self.scheduler = HeatingControllerScheduler(self.schedulerEvent)
+        self.scheduler.start()
+        self.temperature = 20
+        self.set_temperature = 19.8
+        self.hysteresis = 0.3
 
         self.INPUT_TO_STATE = ['00000', '10000', '01000','00100','00010','00001']
         self.STATES = ['Off', 'Gas Auto Fan', 'Gas Slow Fan', 'Fan', 'Elec Auto Fan', 'Elec Slow Fan']
@@ -41,6 +45,11 @@ class HeatingController():
         self.STATE_ERROR = 'Error'
         self.state = self.STATE_OFF
         self.desired_state = self.STATE_OFF
+
+        self.INTENSITY_LOW = 'low'
+        self.INTENSITY_HIGH= 'high'
+        self.INTENSITY = [self.INTENSITY_LOW, self.INTENSITY_HIGH]
+        self.intensity = self.INTENSITY
 
         self.MODE_AUTO = 'auto'
         self.MODE_MANUAL = 'manual'
@@ -55,6 +64,14 @@ class HeatingController():
         self.client.on_message = self.on_message
         self.client.username_pw_set(Settings.mqtt_server['username'], Settings.mqtt_server['password'])
 
+    #
+    def schedulerEvent(self, temp=None,intensity=None,mode=None):
+        if temp:
+            self.set_temperature = temp
+        if intensity:
+            print(intensity)
+        if mode:
+            print(mode)
 
     # The callback for when the client receives a CONNACK response from the server.
     def on_connect(self, client, userdata, flags, rc):
@@ -143,16 +160,16 @@ class HeatingController():
         self.client.loop_start()
         sleep(5)
         while True:
-            sleep(1)
+            self.scheduler.tick()
+            sleep(10)
             if self.mode == self.MODE_AUTO:
                 if self.temperature < (self.set_temperature - self.hysteresis):
                     self.switch_to_state(self.STATE_ON)
                 elif self.temperature > (self.set_temperature + self.hysteresis):
                     self.switch_to_state(self.STATE_OFF)
-            
+
         self.client.loop_stop()
-
-
+        
 if __name__ == "__main__":
     heatingController = HeatingController()
     heatingController.start()
