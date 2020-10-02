@@ -1,1 +1,4 @@
+syntax: glob
+
 heatingcontroller_settings.py
+*.pyc
