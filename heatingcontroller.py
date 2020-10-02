@@ -31,40 +31,90 @@ class SensorData(NamedTuple):
 
 class HeatingController():
     def __init__(self):
-        self.scheduler = HeatingControllerScheduler(self.schedulerEvent)
-        self.scheduler.start()
-        self.temperature = 20
-        self.set_temperature = 19.8
-        self.hysteresis = 0.3
 
-        self.INPUT_TO_STATE = ['00000', '10000', '01000','00100','00010','00001']
-        self.STATES = ['Off', 'Gas Auto Fan', 'Gas Slow Fan', 'Fan', 'Elec Auto Fan', 'Elec Slow Fan']
-
-        self.STATE_ON = 'Elec Auto Fan'
-        self.STATE_OFF = 'Off'
-        self.STATE_ERROR = 'Error'
-        self.state = self.STATE_OFF
-        self.desired_state = self.STATE_OFF
-
-        self.INTENSITY_LOW = 'low'
-        self.INTENSITY_HIGH= 'high'
-        self.INTENSITY = [self.INTENSITY_LOW, self.INTENSITY_HIGH]
-        self.intensity = self.INTENSITY
-
-        self.MODE_AUTO = 'auto'
-        self.MODE_MANUAL = 'manual'
-        self.MODES = [self.MODE_AUTO, self.MODE_MANUAL]
-        self.mode = self.MODE_AUTO
-        
-        
+        # InfluxDB client
         self.influxdb_client = InfluxDBClient(  Settings.influxdb['host'], Settings.influxdb['port'], Settings.influxdb['username'], Settings.influxdb['password'], Settings.influxdb['database'])
 
+        # MQTT client
         self.client = mqtt.Client()
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.client.username_pw_set(Settings.mqtt_server['username'], Settings.mqtt_server['password'])
 
-    #
+        # Control states
+        self.INPUT_TO_STATE = ['00000', '10000', '01000','00100','00010','00001']
+        self.STATES = ['Off', 'Gas Auto Fan', 'Gas Slow Fan', 'Fan', 'Elec Auto Fan', 'Elec Slow Fan']
+        self.STATE_ERROR = 'Error'
+        self.STATE_OFF = 'Off'
+        self.STATE_ON_LOW = 'Elec Slow Fan'
+        self.STATE_ON_HIGH = 'Elec Auto Fan'
+        self.STATE_ON = self.STATE_ON_HIGH
+        self.state = self.STATE_OFF
+        self.desired_state = self.STATE_OFF
+
+        # Temperature control paramters
+        self.hysteresis = 0.3
+        self.set_temperature = 19.8
+        self.temperature = 20
+
+        # Mode, manual or auto
+        self.MODE_AUTO = 'auto'
+        self.MODE_MANUAL = 'manual'
+        self.MODES = [self.MODE_AUTO, self.MODE_MANUAL]
+        self.mode = self.MODE_AUTO
+
+        # Intensity low or high
+        self.INTENSITY_LOW = 'low'
+        self.INTENSITY_HIGH= 'high'
+        self.INTENSITY = [self.INTENSITY_LOW, self.INTENSITY_HIGH]
+        self.intensity = self.INTENSITY_LOW
+
+        # Scheduler
+        self.scheduler = HeatingControllerScheduler(self.schedulerEvent)
+        self.scheduler.start()
+
+    def publishControlStatus(self, controlName, value):
+        if hasattr(self,'client'):
+            self.client.publish(Settings.control_topic.replace("#","status/" + str(controlName)), value, retain=True)
+
+    @property
+    def set_temperature(self):
+        return self._set_temperature
+
+    @set_temperature.setter
+    def set_temperature(self, x):
+        if x > 25:
+            x = 25
+        elif x<5:
+            x = 5
+        self._set_temperature = x
+        self.publishControlStatus('set_temperature', self.set_temperature)
+
+    @property
+    def mode(self):
+        return self._mode
+
+    @mode.setter
+    def mode(self, mode):
+        if mode in self.MODES:
+            self._mode = mode
+            self.publishControlStatus('mode', self.mode)
+
+    @property
+    def intensity(self):
+        return self._intensity
+
+    @intensity.setter
+    def intensity(self, v):
+        if v in self.INTENSITY:
+            self._intensity = v
+            if self.intensity == self.INTENSITY_LOW:
+                self.STATE_ON = self.STATE_ON_LOW
+            else:
+                self.STATE_ON = self.STATE_ON_HIGH
+            self.publishControlStatus('intensity', self.intensity)
+
+
     def schedulerEvent(self, temp=None,intensity=None,mode=None):
         if temp:
             self.set_temperature = temp
@@ -112,15 +162,16 @@ class HeatingController():
         match = re.match(Settings.control_regex, msg.topic)
         if match:
             command = match.group(1)
+
             if command == 'mode':
-                mode = msg.payload.decode('utf-8')
-                if mode in self.MODES:
-                    self.mode = self.MODES[self.MODES.index(mode)]
-                    print("New mode: {0}".format(self.mode))
-            elif command == 'temperature':
+                self.mode = msg.payload.decode('utf-8')
+
+            elif command == 'intensity':
+                self.intensity = msg.payload.decode('utf-8')
+
+            elif command == 'set_temperature':
                 self.set_temperature = float(msg.payload)
-                print("New set temperature: {0}".format(self.set_temperature))
-    
+
     def get_state_distance(self, state1, state2):
         idx1 = self.STATES.index(state1)
         idx2 = self.STATES.index(state2)
