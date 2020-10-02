@@ -6,6 +6,7 @@ import time
 class HeatingControllerScheduler:
     def __init__(self, callback):
         self.callback = callback
+        self.running = False
 
     def weekday(self, time, temp, intensity):
         schedule.every().monday.at(time).do(self.callback,temp,intensity)
@@ -37,6 +38,33 @@ class HeatingControllerScheduler:
         schedule.clear()
         self.running = False
     
+    def _custom_job_format(self, j):
+        def format_time(t):
+            return t.strftime('%Y-%m-%d %H:%M') if t else '[never]'
+
+        v = {
+            'next_run': format_time(j.next_run),
+            'temperature': j.job_func.args[0],
+            'intensity': j.job_func.args[1]
+        }
+        return v
+
+    def next_run(self):
+        jobs = self.jobs()
+        if len(jobs) > 0:
+            j = jobs[0]
+            return "{}: {} °C".format(j['next_run'], j['temperature'])
+        return ""
+
+
+    def jobs(self):
+        customlist = []
+        sortedJobs = schedule.jobs.copy()
+        sortedJobs.sort(key=lambda x: x.next_run)
+        for j in sortedJobs:
+            customlist.append(self._custom_job_format(j))
+        return customlist
+
     def tick(self):
         if self.running:
             schedule.run_pending()
@@ -58,5 +86,6 @@ if __name__ == "__main__":
     while(True):
         s.tick()
         time.sleep(1)
-        print(schedule.jobs)
+        print(s.next_run())
+        print(s.jobs())
 

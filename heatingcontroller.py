@@ -61,7 +61,7 @@ class HeatingController():
         self.MODE_AUTO = 'auto'
         self.MODE_MANUAL = 'manual'
         self.MODES = [self.MODE_AUTO, self.MODE_MANUAL]
-        self.mode = self.MODE_AUTO
+        self.mode = self.MODE_MANUAL
 
         # Intensity low or high
         self.INTENSITY_LOW = 'low'
@@ -70,8 +70,8 @@ class HeatingController():
         self.intensity = self.INTENSITY_LOW
 
         # Scheduler
-        self.scheduler = HeatingControllerScheduler(self.schedulerEvent)
-        self.scheduler.start()
+        self._scheduler = HeatingControllerScheduler(self.schedulerEvent)
+        self._scheduler.start()
 
     def publishControlStatus(self, controlName, value):
         if hasattr(self,'client'):
@@ -83,8 +83,8 @@ class HeatingController():
 
     @set_temperature.setter
     def set_temperature(self, x):
-        if x > 25:
-            x = 25
+        if x > 30:
+            x = 30
         elif x<5:
             x = 5
         self._set_temperature = x
@@ -114,14 +114,30 @@ class HeatingController():
                 self.STATE_ON = self.STATE_ON_HIGH
             self.publishControlStatus('intensity', self.intensity)
 
+    @property
+    def scheduler(self):
+        if self._scheduler.running:
+            return 'ON'
+        else:
+            return 'OFF'
+
+    @scheduler.setter
+    def scheduler(self, v):
+        if v == True:
+            self._scheduler.start()
+        else:
+            self._scheduler.stop()
+
+        self.publishControlStatus('scheduler', self.scheduler)
 
     def schedulerEvent(self, temp=None,intensity=None,mode=None):
         if temp:
             self.set_temperature = temp
         if intensity:
-            print(intensity)
+            self.intensity = intensity
         if mode:
-            print(mode)
+            self.mode = mode
+        self.publishControlStatus('scheduler_next', self._scheduler.next_run())
 
     # The callback for when the client receives a CONNACK response from the server.
     def on_connect(self, client, userdata, flags, rc):
@@ -144,7 +160,7 @@ class HeatingController():
 
             if (measurement == 'temperature'):
                 self.temperature = float(msg.payload)
-                print("Current: {0},  Set: {1}".format(self.temperature, self.set_temperature))
+                #print("Current: {0},  Set: {1}".format(self.temperature, self.set_temperature))
                 #print("New temperature: ", self.temperature)
 
     # These messages coming from the ESP8266
@@ -171,6 +187,11 @@ class HeatingController():
 
             elif command == 'set_temperature':
                 self.set_temperature = float(msg.payload)
+
+            elif command == 'scheduler':
+                self.scheduler = True if msg.payload.decode('utf-8') == 'ON' else False
+
+
 
     def get_state_distance(self, state1, state2):
         idx1 = self.STATES.index(state1)
@@ -211,7 +232,8 @@ class HeatingController():
         self.client.loop_start()
         sleep(5)
         while True:
-            self.scheduler.tick()
+            self._scheduler.tick()
+            self.publishControlStatus('scheduler_next', self._scheduler.next_run())
             sleep(10)
             if self.mode == self.MODE_AUTO:
                 if self.temperature < (self.set_temperature - self.hysteresis):
