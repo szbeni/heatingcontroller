@@ -44,6 +44,8 @@ class HeatingController():
         # Control states
         self.INPUT_TO_STATE = ['00000', '10000', '01000','00100','00010','00001']
         self.STATES = ['Off', 'Gas Auto Fan', 'Gas Slow Fan', 'Fan', 'Elec Auto Fan', 'Elec Slow Fan']
+        self.STATE_GAS_AUTO = 'Gas Auto Fan'
+        self.STATE_ELEC_AUTO = 'Elec Auto Fan'
         self.STATE_ERROR = 'Error'
         self.STATE_OFF = 'Off'
         self.STATE_ON_LOW = 'Elec Slow Fan'
@@ -235,6 +237,17 @@ class HeatingController():
             self._scheduler.tick()
             self.publishControlStatus('scheduler_next', self._scheduler.next_run())
             sleep(10)
+
+            # Change to auto mode if state is set to Elec_AUTO
+            if self.mode == self.MODE_MANUAL:
+                if self.state == self.STATE_ELEC_AUTO:
+                    self.mode = self.MODE_AUTO
+
+            # Change to manual mode if state is set to Gas_AUTO
+            if self.mode == self.MODE_AUTO:
+                if self.state == self.STATE_GAS_AUTO:
+                    self.mode = self.MODE_MANUAL
+
             if self.mode == self.MODE_AUTO:
                 if self.temperature < (self.set_temperature - self.hysteresis):
                     self.switch_to_state(self.STATE_ON)

@@ -20,7 +20,7 @@
 #define MQTT_TOPIC_COMMAND "caravan/heatingcontrol/cmd/#"
 
 #define MQTT_PUBLISH_INPUT_DELAY 10000
-#define MQTT_PUBLISH_SENSOR_DELAY 10000
+#define MQTT_PUBLISH_SENSOR_DELAY 60000
 #define MQTT_CLIENT_ID "heatingcontrol"
 
 #define SEALEVELPRESSURE_HPA (1013.25)
@@ -81,12 +81,13 @@ void setup() {
   }
 
   // Use force mode so that the sensor returns to sleep mode when the measurement is finished
-  //bme.setSampling(Adafruit_BME280::MODE_FORCED,
-  //                Adafruit_BME280::SAMPLING_X1, // temperature
-  //Adafruit_BME280::SAMPLING_X1, // pressure
-  //                Adafruit_BME280::SAMPLING_X1, // humidity
-  //                Adafruit_BME280::FILTER_OFF);
-  //  
+  bme.setSampling(Adafruit_BME280::MODE_FORCED,
+                  Adafruit_BME280::SAMPLING_X1, // temperature
+                  Adafruit_BME280::SAMPLING_X1, // pressure
+                  Adafruit_BME280::SAMPLING_X1, // humidity
+                  Adafruit_BME280::FILTER_OFF,  // filter off
+                  Adafruit_BME280::STANDBY_MS_1000); // only in normal mode
+    
 
   setupWifi();
   mqttClient.setServer(MQTT_SERVER, 1883);
@@ -110,7 +111,7 @@ void sensorLoop() {
     lastSensorMsgTime = now;
 
     // Reading BME280 sensor data
-    //bme.takeForcedMeasurement(); // has no effect in normal mode
+    bme.takeForcedMeasurement(); // has no effect in normal mode
     humidity = bme.readHumidity();
     temperature = bme.readTemperature();
     pressure = bme.readPressure() / 100.0F;
