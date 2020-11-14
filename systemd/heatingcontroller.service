@@ -1,0 +1,14 @@
+[Unit]
+Description=Heating Controller
+After=multi-user.target
+
+[Service]
+Type=idle
+ExecStart=/usr/bin/python3 /home/caravan/scripts/openhab/heatingcontroller/heatingcontroller.py
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=heatingcontroller
+
+
+[Install]
+WantedBy=multi-user.target
