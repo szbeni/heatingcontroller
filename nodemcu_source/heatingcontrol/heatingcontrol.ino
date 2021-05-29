@@ -10,6 +10,8 @@
 #include <Adafruit_BME280.h>
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <ArduinoOTA.h>
+
 
 #define MQTT_TOPIC_HUMIDITY "caravan/heatingcontrol/sensor/humidity"
 #define MQTT_TOPIC_TEMPERATURE "caravan/heatingcontrol/sensor/temperature"
@@ -40,11 +42,11 @@
 #define INPUT_ELEC_SLOW_FAN D0
 
 const char *WIFI_SSID = "ABWifi";
-const char *WIFI_PASSWORD = "Secret_12345";
+const char *WIFI_PASSWORD = "secret";
 
-const char *MQTT_SERVER = "192.168.3.1";
+const char *MQTT_SERVER = "10.1.1.1";
 const char *MQTT_USER = "caravan"; // NULL for no authentication
-const char *MQTT_PASSWORD = "Fafafa123$"; // NULL for no authentication
+const char *MQTT_PASSWORD = "secret"; // NULL for no authentication
 
 float humidity;
 float temperature;
@@ -92,6 +94,8 @@ void setup() {
   setupWifi();
   mqttClient.setServer(MQTT_SERVER, 1883);
   mqttClient.setCallback(mqttOnMessage);
+  ArduinoOTA.begin();
+
 }
 
 void loop() {
@@ -101,7 +105,7 @@ void loop() {
   mqttClient.loop();
   sensorLoop();
   heatingControlLoop();
-
+  ArduinoOTA.handle();
 }
 
 void sensorLoop() {
@@ -127,6 +131,8 @@ void sensorLoop() {
     mqttPublish(MQTT_TOPIC_HUMIDITY, humidity);
     mqttPublish(MQTT_TOPIC_PRESSURE, pressure);
     mqttPublish(MQTT_TOPIC_ALTITUDE, altitude);
+    Serial.println("Temp:");
+    Serial.println(temperature);
   }
 
 }
